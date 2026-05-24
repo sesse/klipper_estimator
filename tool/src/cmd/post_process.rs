@@ -213,6 +213,10 @@ impl GCodeInterceptor for IdeaMakerGCodeInterceptor {
 
 #[derive(Debug, Default)]
 struct CuraGCodeInterceptor {
+    // NOTE: Cura only inserts M73 commands if the “Display Info on LCD” post-processing script
+    // is enabled, and the “Add M73 Line(s)” checkbox within that script is checked.
+    // klipper_estimator does not insert new M73 commands.
+    m73_interceptor: M73GcodeInterceptor,
     time_buffer: VecDeque<f64>,
 }
 
@@ -222,6 +226,8 @@ impl GCodeInterceptor for CuraGCodeInterceptor {
             if com.starts_with("TIME_ELAPSED:") {
                 self.time_buffer.push_back(result.total_time);
             }
+        } else {
+            self.m73_interceptor.post_command(command, result);
         }
     }
 
@@ -230,6 +236,10 @@ impl GCodeInterceptor for CuraGCodeInterceptor {
         command: &GCodeCommand,
         result: &PostProcessEstimationResult,
     ) -> Option<GCodeCommand> {
+        if let Some(cmd) = self.m73_interceptor.output_process(command, result) {
+            return Some(cmd);
+        }
+
         if let Some(com) = &command.comment {
             if com.starts_with("TIME:") {
                 return Some(GCodeCommand {
